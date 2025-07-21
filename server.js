@@ -1,89 +1,75 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 
-// Permitir solo tu dominio
+// Configuración de CORS más específica
 const io = new Server(server, {
-  cors: {
-    origin: "https://www.pulsadorauxiliorapidopnp.com.pe ",
-    methods: ["GET", "POST"],
-    credentials: true
-  }
+    cors: {
+        origin: "https://www.pulsadorauxiliorapidopnp.com.pe",
+        methods: ["GET", "POST"],
+        credentials: true
+    }
 });
 
-// Ruta raíz: opcional - puedes dejar un mensaje simple
 app.get('/', (req, res) => {
-  res.send('Servidor Socket.IO activo ✅');
+    res.send('Servidor Socket.IO para Walkie-Talkie activo ✅');
 });
 
-// Estado global
-let currentSpeaker = null;
+const activeSockets = new Set();
 
-// Manejo de conexiones
 io.on('connection', (socket) => {
-  console.log('✅ Usuario conectado:', socket.id);
+    console.log(`✅ Usuario conectado: ${socket.id}`);
+    activeSockets.add(socket.id);
 
-  // Enviar ID al cliente
-  socket.emit('clientId', socket.id);
+    // Enviar al nuevo cliente su propio ID
+    socket.emit('yourId', socket.id);
 
-  // Notificar a otros usuarios
-  socket.broadcast.emit('newClient', socket.id);
+    // Enviar al nuevo cliente la lista de los demás conectados
+    const otherClients = Array.from(activeSockets).filter(id => id !== socket.id);
+    socket.emit('allClients', otherClients);
 
-  // Solicitud para hablar (Push-to-Talk)
-  socket.on('requestPTT', () => {
-    if (!currentSpeaker) {
-      currentSpeaker = socket.id;
-      io.emit('speakerChanged', socket.id);
-      socket.emit('pttGranted');
-      console.log(`🎙️ Micrófono concedido a: ${socket.id}`);
-    } else {
-      socket.emit('pttDenied', 'Otro usuario está hablando.');
-    }
-  });
+    // Notificar a los demás que un nuevo cliente se ha unido
+    socket.broadcast.emit('newClient', socket.id);
 
-  // Liberar micrófono
-  socket.on('releasePTT', () => {
-    if (currentSpeaker === socket.id) {
-      currentSpeaker = null;
-      io.emit('speakerReleased');
-      console.log(`🔇 Micrófono liberado por: ${socket.id}`);
-    }
-  });
+    // WebRTC: Reenviar oferta (offer) al destinatario correcto
+    socket.on('offer', (payload) => {
+        console.log(` reenviando oferta de ${socket.id} a ${payload.to}`);
+        io.to(payload.to).emit('offer', {
+            from: socket.id,
+            sdp: payload.sdp
+        });
+    });
 
-  // WebRTC: Oferta SDP
-  socket.on('offer', (data) => {
-    socket.broadcast.emit('offer', data);
-  });
+    // WebRTC: Reenviar respuesta (answer) al destinatario correcto
+    socket.on('answer', (payload) => {
+        console.log(` reenviando respuesta de ${socket.id} a ${payload.to}`);
+        io.to(payload.to).emit('answer', {
+            from: socket.id,
+            sdp: payload.sdp
+        });
+    });
 
-  // WebRTC: Respuesta SDP
-  socket.on('answer', (data) => {
-    socket.broadcast.emit('answer', data);
-  });
+    // WebRTC: Reenviar candidatos ICE
+    socket.on('ice-candidate', (payload) => {
+        io.to(payload.to).emit('ice-candidate', {
+            from: socket.id,
+            candidate: payload.candidate
+        });
+    });
 
-  // WebRTC: Candidatos ICE
-  socket.on('ice-candidate', (data) => {
-    socket.broadcast.emit('ice-candidate', data);
-  });
-
-  // Desconexión
-  socket.on('disconnect', () => {
-    console.log('🔴 Usuario desconectado:', socket.id);
-    if (currentSpeaker === socket.id) {
-      currentSpeaker = null;
-      io.emit('speakerReleased');
-    }
-    socket.broadcast.emit('clientDisconnected', socket.id);
-  });
+    socket.on('disconnect', () => {
+        console.log(`🔴 Usuario desconectado: ${socket.id}`);
+        activeSockets.delete(socket.id);
+        // Notificar a los demás que el cliente se ha desconectado
+        socket.broadcast.emit('clientDisconnected', socket.id);
+    });
 });
 
-// Puerto dinámico (Render) o 3000 (local)
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
-
-// Exportar para pruebas
-module.exports = server;
