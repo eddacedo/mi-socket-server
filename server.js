@@ -1,4 +1,4 @@
-// server.js
+// server.js (versión corregida)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -25,71 +25,55 @@ io.on('connection', (socket) => {
     console.log(`✅ Usuario conectado: ${socket.id}`);
     activeSockets.add(socket.id);
     socket.emit('yourId', socket.id);
+    
+    // Notificar a todos sobre el nuevo cliente
     const otherClients = Array.from(activeSockets).filter(id => id !== socket.id);
     socket.emit('allClients', otherClients);
     socket.broadcast.emit('newClient', socket.id);
 
-    // Manejar solicitud PTT
+    // Manejar PTT
     socket.on('requestPTT', () => {
         if (!currentSpeaker) {
             currentSpeaker = socket.id;
             socket.emit('pttGranted');
-            console.log(`✅ PTT concedido a ${socket.id}`);
             socket.broadcast.emit('pttDenied', 'Otro usuario está hablando');
         } else {
             socket.emit('pttDenied', 'Canal ocupado');
-            console.log(`❌ PTT denegado para ${socket.id}: Canal ocupado`);
         }
     });
 
-    // Manejar liberación PTT
     socket.on('releasePTT', () => {
         if (currentSpeaker === socket.id) {
             currentSpeaker = null;
-            console.log(`✅ PTT liberado por ${socket.id}`);
             socket.broadcast.emit('pttReleased');
         }
     });
 
-    // Manejar solicitud de lista de clientes
-    socket.on('requestAllClients', () => {
-        socket.emit('allClients', Array.from(activeSockets).filter(id => id !== socket.id));
+    // Señalización WebRTC (CORRECCIONES CLAVE AQUÍ)
+    socket.on('offer', ({ to, sdp }) => {
+        console.log(`📩 Oferta de ${socket.id} a ${to}`);
+        io.to(to).emit('offer', { from: socket.id, sdp });
     });
 
-    // Reenviar oferta WebRTC
-    socket.on('offer', (payload) => {
-        console.log(`Reenviando oferta de ${socket.id} a ${payload.to}`);
-        io.to(payload.to).emit('offer', {
-            from: socket.id,
-            sdp: payload.sdp
-        });
+    socket.on('answer', ({ to, sdp }) => {
+        console.log(`📨 Respuesta de ${socket.id} a ${to}`);
+        io.to(to).emit('answer', { from: socket.id, sdp });
     });
 
-    // Reenviar respuesta WebRTC
-    socket.on('answer', (payload) => {
-        console.log(`Reenviando respuesta de ${socket.id} a ${payload.to}`);
-        io.to(payload.to).emit('answer', {
-            from: socket.id,
-            sdp: payload.sdp
-        });
+    socket.on('ice-candidate', ({ to, candidate }) => {
+        io.to(to).emit('ice-candidate', { from: socket.id, candidate });
     });
 
-    // Reenviar candidatos ICE
-    socket.on('ice-candidate', (payload) => {
-        console.log(`Reenviando ICE candidate de ${socket.id} a ${payload.to}`);
-        io.to(payload.to).emit('ice-candidate', {
-            from: socket.id,
-            candidate: payload.candidate
-        });
-    });
-
+    // Manejo de desconexión
     socket.on('disconnect', () => {
         console.log(`🔴 Usuario desconectado: ${socket.id}`);
+        activeSockets.delete(socket.id);
+        
         if (currentSpeaker === socket.id) {
             currentSpeaker = null;
             socket.broadcast.emit('pttReleased');
         }
-        activeSockets.delete(socket.id);
+        
         socket.broadcast.emit('clientDisconnected', socket.id);
     });
 });
