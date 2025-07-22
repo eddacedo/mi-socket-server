@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -53,7 +52,7 @@ io.on('connection', (socket) => {
 
     // Reenviar oferta WebRTC
     socket.on('offer', (payload) => {
-        console.log(`Reenviando oferta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenvi“ando oferta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('offer', {
             from: socket.id,
             sdp: payload.sdp
@@ -62,7 +61,7 @@ io.on('connection', (socket) => {
 
     // Reenviar respuesta WebRTC
     socket.on('answer', (payload) => {
-        console.log(`Reenviando respuesta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenvi“ando respuesta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('answer', {
             from: socket.id,
             sdp: payload.sdp
@@ -71,7 +70,7 @@ io.on('connection', (socket) => {
 
     // Reenviar candidatos ICE
     socket.on('ice-candidate', (payload) => {
-        console.log(`Reenviando ICE candidate de ${socket.id} a ${payload.to}`);
+        console.log(`Reenvi“ando ICE candidate de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('ice-candidate', {
             from: socket.id,
             candidate: payload.candidate
