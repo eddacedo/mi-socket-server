@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -18,7 +19,7 @@ app.get('/', (req, res) => {
 });
 
 const activeSockets = new Set();
-let currentSpeaker = null; // Rastrea quién está hablando
+let currentSpeaker = null;
 
 io.on('connection', (socket) => {
     console.log(`✅ Usuario conectado: ${socket.id}`);
@@ -50,9 +51,14 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Manejar solicitud de lista de clientes
+    socket.on('requestAllClients', () => {
+        socket.emit('allClients', Array.from(activeSockets).filter(id => id !== socket.id));
+    });
+
     // Reenviar oferta WebRTC
     socket.on('offer', (payload) => {
-        console.log(`Reenvi“ando oferta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenviando oferta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('offer', {
             from: socket.id,
             sdp: payload.sdp
@@ -61,7 +67,7 @@ io.on('connection', (socket) => {
 
     // Reenviar respuesta WebRTC
     socket.on('answer', (payload) => {
-        console.log(`Reenvi“ando respuesta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenviando respuesta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('answer', {
             from: socket.id,
             sdp: payload.sdp
@@ -70,7 +76,7 @@ io.on('connection', (socket) => {
 
     // Reenviar candidatos ICE
     socket.on('ice-candidate', (payload) => {
-        console.log(`Reenvi“ando ICE candidate de ${socket.id} a ${payload.to}`);
+        console.log(`Reenviando ICE candidate de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('ice-candidate', {
             from: socket.id,
             candidate: payload.candidate
@@ -88,7 +94,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
