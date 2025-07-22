@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -5,8 +6,6 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-
-// Configuración de CORS más específica
 const io = new Server(server, {
     cors: {
         origin: "https://www.pulsadorauxiliorapidopnp.com.pe",
@@ -20,41 +19,59 @@ app.get('/', (req, res) => {
 });
 
 const activeSockets = new Set();
+let currentSpeaker = null; // Rastrea quién está hablando
 
 io.on('connection', (socket) => {
     console.log(`✅ Usuario conectado: ${socket.id}`);
     activeSockets.add(socket.id);
-
-    // Enviar al nuevo cliente su propio ID
     socket.emit('yourId', socket.id);
-
-    // Enviar al nuevo cliente la lista de los demás conectados
     const otherClients = Array.from(activeSockets).filter(id => id !== socket.id);
     socket.emit('allClients', otherClients);
-
-    // Notificar a los demás que un nuevo cliente se ha unido
     socket.broadcast.emit('newClient', socket.id);
 
-    // WebRTC: Reenviar oferta (offer) al destinatario correcto
+    // Manejar solicitud PTT
+    socket.on('requestPTT', () => {
+        if (!currentSpeaker) {
+            currentSpeaker = socket.id;
+            socket.emit('pttGranted');
+            console.log(`✅ PTT concedido a ${socket.id}`);
+            socket.broadcast.emit('pttDenied', 'Otro usuario está hablando');
+        } else {
+            socket.emit('pttDenied', 'Canal ocupado');
+            console.log(`❌ PTT denegado para ${socket.id}: Canal ocupado`);
+        }
+    });
+
+    // Manejar liberación PTT
+    socket.on('releasePTT', () => {
+        if (currentSpeaker === socket.id) {
+            currentSpeaker = null;
+            console.log(`✅ PTT liberado por ${socket.id}`);
+            socket.broadcast.emit('pttReleased');
+        }
+    });
+
+    // Reenviar oferta WebRTC
     socket.on('offer', (payload) => {
-        console.log(` reenviando oferta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenviando oferta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('offer', {
             from: socket.id,
             sdp: payload.sdp
         });
     });
 
-    // WebRTC: Reenviar respuesta (answer) al destinatario correcto
+    // Reenviar respuesta WebRTC
     socket.on('answer', (payload) => {
-        console.log(` reenviando respuesta de ${socket.id} a ${payload.to}`);
+        console.log(`Reenviando respuesta de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('answer', {
             from: socket.id,
             sdp: payload.sdp
         });
     });
 
-    // WebRTC: Reenviar candidatos ICE
+    // Reenviar candidatos ICE
     socket.on('ice-candidate', (payload) => {
+        console.log(`Reenviando ICE candidate de ${socket.id} a ${payload.to}`);
         io.to(payload.to).emit('ice-candidate', {
             from: socket.id,
             candidate: payload.candidate
@@ -63,8 +80,11 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`🔴 Usuario desconectado: ${socket.id}`);
+        if (currentSpeaker === socket.id) {
+            currentSpeaker = null;
+            socket.broadcast.emit('pttReleased');
+        }
         activeSockets.delete(socket.id);
-        // Notificar a los demás que el cliente se ha desconectado
         socket.broadcast.emit('clientDisconnected', socket.id);
     });
 });
