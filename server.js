@@ -1,4 +1,4 @@
-// server.js (versión corregida)
+// server.js (Versión optimizada y limpia)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -22,15 +22,18 @@ const activeSockets = new Set();
 let currentSpeaker = null;
 
 io.on('connection', (socket) => {
+    
     console.log(`✅ Usuario conectado: ${socket.id}`);
     activeSockets.add(socket.id);
     socket.emit('yourId', socket.id);
     
-    // Notificar a todos sobre el nuevo cliente
+    // Notificar al nuevo cliente sobre todos los demás clientes ya conectados
     const otherClients = Array.from(activeSockets).filter(id => id !== socket.id);
     socket.emit('allClients', otherClients);
-    socket.broadcast.emit('newClient', socket.id);
 
+    // Notificar a los clientes existentes sobre el nuevo cliente
+    socket.broadcast.emit('newClient', socket.id);
+    
     // Manejar PTT
     socket.on('requestPTT', () => {
         if (!currentSpeaker) {
@@ -49,7 +52,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Señalización WebRTC (CORRECCIONES CLAVE AQUÍ)
+    // Señalización WebRTC
     socket.on('offer', ({ to, sdp }) => {
         console.log(`📩 Oferta de ${socket.id} a ${to}`);
         io.to(to).emit('offer', { from: socket.id, sdp });
@@ -61,7 +64,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('ice-candidate', ({ to, candidate }) => {
-        io.to(to).emit('ice-candidate', { from: socket.id, candidate });
+        // Asegúrate de que no se envíe un candidato nulo
+        if (candidate) {
+            io.to(to).emit('ice-candidate', { from: socket.id, candidate });
+        }
     });
 
     // Manejo de desconexión
