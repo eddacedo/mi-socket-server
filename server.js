@@ -23,14 +23,6 @@ let currentSpeaker = null;
 
 io.on('connection', (socket) => {
 
-    // Nuevo: canal de audio compartido desde maqui
-let audioStream = null; //sacar
-
-socket.on('audio-stream', (data) => {
-    // Retransmitir el audio a todos los demás clientes
-    socket.broadcast.emit('audio-from-server', data);
-});
-    //hasta aqi
     console.log(`✅ Usuario conectado: ${socket.id}`);
     activeSockets.add(socket.id);
     socket.emit('yourId', socket.id);
